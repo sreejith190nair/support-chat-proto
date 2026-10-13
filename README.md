@@ -58,3 +58,52 @@ Demo timers are shortened (nudge email 30 s, push 10 s, idle 60 s + 45 s).
 - `lib/types.ts`: shapes mirroring the planned `support_chats` tables
 - `lib/catalog.ts`: topics, articles, canned replies, resolution codes
 - `components/HotelSide.tsx`, `components/AdminSide.tsx`, `components/Inspector.tsx`
+
+## Offline AI assistant (Hugging Face)
+
+When live chat is offline (no agent online, queue paused or outside hours), the
+widget offers **"Ask our assistant"** before raising a ticket.
+
+- The browser calls `POST /api/assistant` (`app/api/assistant/route.ts`), a
+  server route, so the Hugging Face token never reaches the browser.
+- The answer is **grounded**: the model only sees the chosen category/issue and
+  the matching help articles from `lib/catalog.ts`, and is told to suggest a
+  ticket rather than guess. The source articles are shown under each answer.
+- Card numbers, emails and phone numbers are stripped before anything is sent.
+- "This solved it" logs a self-solved help session. "Still stuck" raises a
+  ticket with the assistant conversation attached.
+- The widget labels it as AI.
+
+To use a real model:
+
+```bash
+cp .env.example .env.local   # then put your token in HF_TOKEN
+npm run dev                  # restart so the env is read
+```
+
+Without a token (or if the provider fails), it answers from the best-matching
+articles instead, and the Inspector's **AI** filter says which mode was used.
+
+### Free local model and guardrails
+
+- `AI_PROVIDER=ollama` with `OLLAMA_MODEL=qwen2.5:7b` runs free on the Mac
+  (`brew install ollama`, `ollama serve`, `ollama pull qwen2.5:7b`). The 3B
+  `llama3.2:3b` is faster but invents steps more often.
+- Articles are picked per question (a title match counts 3×), so a follow-up
+  like "rates?" gets the rate articles even if the user first picked a
+  booking issue. The picked issue's articles are only the fallback.
+- If no article matches, the model is not called: the user is told to raise a ticket.
+- Any menu path ("Channel Manager → Rates") or quoted button the model writes
+  must exist in the articles. Otherwise its answer is replaced by the article
+  text, and the Inspector's AI filter shows why.
+
+### Choosing the model: `AI_PROVIDER`
+
+| `AI_PROVIDER` | Needs | Notes |
+|---|---|---|
+| `gemini` | `GEMINI_API_KEY` | Google Gemini via its native API (`lib/ai/gemini.ts`). `GEMINI_MODEL` is a comma-separated list tried in order, because Gemini models are often briefly busy (503) and older ones get retired (404). |
+| `ollama` | Ollama running locally | Free, nothing leaves the machine. |
+| `huggingface` | `HF_TOKEN` + inference credits | |
+
+All three go through the same safety rules: grounding on help articles, the
+category picker when nothing matches, and the invented-menu-path check.

@@ -116,6 +116,10 @@ class SupportStore {
     this.log("http", `${who}: ${text}`);
   }
 
+  logAi(text: string, detail?: string) {
+    this.log("ai", text, detail);
+  }
+
   private chat(id: number) {
     return this.state.chats.find((c) => c.id === id);
   }

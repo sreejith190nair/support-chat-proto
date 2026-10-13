@@ -308,7 +308,20 @@ function Flow({
   }
 
   if (view.name === "offline") {
-    return <Offline user={user} issue={view.issue} onBack={() => setView({ name: "home" })} onClose={onClose} onRaised={(n) => { refresh(); setView({ name: "ticket", number: n }); }} />;
+    return (
+      <Offline
+        user={user}
+        issue={view.issue}
+        entity={view.entity}
+        onBack={() => setView({ name: "home" })}
+        onClose={onClose}
+        onSolved={() => setView({ name: "solved" })}
+        onRaised={(n) => {
+          refresh();
+          setView({ name: "ticket", number: n });
+        }}
+      />
+    );
   }
 
   if (view.name === "solved") {
@@ -479,29 +492,210 @@ function Compose({ issue, entity, user, onBack, onClose, onStarted, onOffline }:
   );
 }
 
-function Offline({ user, issue, onBack, onClose, onRaised }: { user: HotelUser; issue?: Issue; onBack: () => void; onClose: () => void; onRaised: (number: string) => void }) {
+type BotTurn = {
+  role: "user" | "assistant";
+  text: string;
+  sources?: { path: string; title: string }[];
+  // "clarify": nothing matched, so the user picks a category; "issues": that category's issues.
+  kind?: "answer" | "clarify" | "issues";
+  category?: string;
+};
+
+function Offline({ user, issue, entity, onBack, onClose, onRaised, onSolved }: { user: HotelUser; issue?: Issue; entity?: string; onBack: () => void; onClose: () => void; onRaised: (number: string) => void; onSolved: () => void }) {
   const reason = store.availability().reason ?? "no_agent";
+  const topic = issue?.key ?? "other.general";
+  const [turns, setTurns] = useState<BotTurn[]>([]);
+  const [question, setQuestion] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>();
+  const [ticketMode, setTicketMode] = useState(false);
   const [body, setBody] = useState("");
+  const scroller = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
+  }, [turns.length, loading, ticketMode]);
+
+  const send = async (q: string, opts: { topic?: string; useTopic?: boolean } = {}) => {
+    if (!q || loading) return;
+    if (containsCardNumber(q)) return setError("That looks like a card number. Please remove it.");
+    setError(undefined);
+    // Only real exchanges go to the model; the category pickers are UI, not conversation.
+    const history = turns.filter((t) => t.role === "user" || t.kind === "answer").map(({ role, text }) => ({ role, text }));
+    setTurns((t) => [...t, { role: "user", text: q }]);
+    setQuestion("");
+    setLoading(true);
+    store.logHttp(WHO, "POST /api/assistant (server-side, token never in the browser)");
+    try {
+      const res = await fetch("/api/assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: opts.topic ?? topic, entity, question: q, history, useTopic: !!opts.useTopic }),
+      });
+      const data = (await res.json()) as { answer?: string; error?: string; sources?: BotTurn["sources"]; mode?: string; model?: string; reason?: string; redacted?: boolean };
+      if (!res.ok || !data.answer) throw new Error(data.error ?? "The assistant is unavailable.");
+      const kind = data.mode === "clarify" ? "clarify" : "answer";
+      setTurns((t) => [...t, { role: "assistant", text: data.answer!, sources: data.sources, kind }]);
+      if (kind === "clarify") {
+        store.logAi("No help article matched → offered all categories", "model not called, so nothing could be made up");
+      } else {
+        store.logAi(
+          data.mode === "gemini" ? `Gemini · ${data.model}` : data.mode === "ollama" ? `Ollama (local, free) · ${data.model}` : data.mode === "huggingface" ? `Hugging Face · ${data.model}` : `Fallback answer from articles (${data.reason ?? "no model"})`,
+          `grounded on: ${(data.sources ?? []).map((s) => s.title).join(", ") || "none"}${data.redacted ? " · personal data stripped before sending" : ""}`,
+        );
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The assistant is unavailable.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const ask = () => send(question.trim());
+
+  const pickCategory = (c: Category) =>
+    setTurns((t) => [
+      ...t,
+      { role: "user", text: `${c.icon} ${c.label}` },
+      { role: "assistant", kind: "issues", category: c.key, text: `What's the problem with ${c.label}?` },
+    ]);
+
+  const pickIssue = (i: Issue) => send(i.label, { topic: i.key, useTopic: true });
+
+  const transcript = turns.map((t) => `${t.role === "user" ? "Me" : "Assistant (AI)"}: ${t.text}`).join("\n");
+  const answered = turns.some((t) => t.role === "assistant" && t.kind === "answer");
+
   return (
     <>
-      <Header title="Help & Support" onBack={onBack} onClose={onClose} />
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="text-3xl">🌙</div>
-        <p className="mt-2 text-sm text-slate-700">{OFFLINE_REASON[reason]}</p>
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} placeholder="Describe the problem for the ticket…" className="mt-4 w-full rounded-lg border border-slate-300 p-3 text-sm" />
+      <Header title="Help & Support" sub={issue?.label} onBack={onBack} onClose={onClose} />
+      <div ref={scroller} className="flex-1 space-y-3 overflow-y-auto p-4">
+        <div className="flex items-start gap-2 text-sm text-slate-700">
+          <span className="text-2xl">🌙</span>
+          <p>{OFFLINE_REASON[reason]}</p>
+        </div>
+
+        <div className="rounded-xl border border-fuchsia-200 bg-fuchsia-50/50 p-3">
+          <div className="text-xs font-semibold text-fuchsia-900">🤖 Ask our assistant while we&apos;re away</div>
+          <div className="mt-0.5 text-[11px] text-fuchsia-800/80">AI · answers only from 4ROOMS help articles and may be wrong. Don&apos;t share card or guest details.</div>
+
+          <div className="mt-3 space-y-2">
+            {turns.map((t, i) =>
+              t.role === "user" ? (
+                <div key={i} className="flex justify-end">
+                  <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-[#27374D] px-3 py-2 text-sm text-white">{t.text}</div>
+                </div>
+              ) : (
+                <div key={i} className="max-w-[92%] rounded-2xl rounded-bl-sm border border-fuchsia-200 bg-white px-3 py-2 text-sm text-slate-800">
+                  <div className="mb-0.5 text-[11px] font-semibold text-fuchsia-700">Assistant · AI</div>
+                  <div className="whitespace-pre-wrap">{t.text}</div>
+                  {t.kind === "clarify" && i === turns.length - 1 && (
+                    <div className="mt-2 grid grid-cols-3 gap-1.5">
+                      {CATEGORIES.map((c) => (
+                        <button
+                          key={c.key}
+                          disabled={loading}
+                          onClick={() => pickCategory(c)}
+                          className="flex flex-col items-center gap-0.5 rounded-lg border border-slate-200 px-1 py-2 text-[11px] text-slate-700 hover:border-[#53C0C9] hover:bg-[#53C0C9]/10"
+                        >
+                          <span className="text-base">{c.icon}</span>
+                          {c.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {t.kind === "issues" && i === turns.length - 1 && (
+                    <div className="mt-2 space-y-1">
+                      {(CATEGORIES.find((c) => c.key === t.category)?.issues ?? []).map((iss) => (
+                        <button
+                          key={iss.key}
+                          disabled={loading}
+                          onClick={() => pickIssue(iss)}
+                          className="block w-full rounded-lg border border-slate-200 px-3 py-1.5 text-left text-xs text-slate-700 hover:border-[#53C0C9] hover:bg-[#53C0C9]/10"
+                        >
+                          {iss.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {!!t.sources?.length && (
+                    <div className="mt-2">
+                      <div className="text-[10px] uppercase tracking-wide text-slate-400">From these articles</div>
+                      {t.sources.map((s) => (
+                        <ArticleCard key={s.path} path={s.path} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ),
+            )}
+            {loading && <div className="text-xs italic text-fuchsia-700">Assistant is thinking…</div>}
+          </div>
+
+          {!ticketMode && (
+            <div className="mt-3 flex items-end gap-2">
+              <textarea
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ask();
+                }}
+                rows={2}
+                placeholder={answered ? "Ask a follow-up…" : `Describe the problem${issue ? ` with "${issue.label}"` : ""}…`}
+                className="flex-1 resize-none rounded-lg border border-slate-300 bg-white p-2 text-sm focus:border-fuchsia-400 focus:outline-none"
+              />
+              <button disabled={loading || !question.trim()} onClick={ask} className="rounded-lg bg-fuchsia-600 px-3 py-2 text-sm text-white disabled:opacity-40">
+                Ask
+              </button>
+            </div>
+          )}
+          {error && <div className="mt-1 text-xs text-rose-600">{error}</div>}
+
+          {answered && !ticketMode && (
+            <div className="mt-3 flex gap-2 text-xs">
+              <button
+                onClick={() => {
+                  store.helpSession(user, topic, "self_solved");
+                  onSolved();
+                }}
+                className="flex-1 rounded-lg border border-slate-300 bg-white py-1.5"
+              >
+                ✅ This solved it
+              </button>
+              <button
+                onClick={() => {
+                  setBody(`${turns.find((t) => t.role === "user")?.text ?? ""}`);
+                  setTicketMode(true);
+                }}
+                className="flex-1 rounded-lg bg-[#27374D] py-1.5 text-white"
+              >
+                Still stuck → ticket
+              </button>
+            </div>
+          )}
+        </div>
+
+        {(ticketMode || !answered) && (
+          <div>
+            <div className="mb-1 text-xs font-medium text-slate-600">{ticketMode ? "Raise a ticket (the assistant conversation is attached)" : "Or skip straight to a ticket"}</div>
+            <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={3} placeholder="Describe the problem for the ticket…" className="w-full rounded-lg border border-slate-300 p-3 text-sm" />
+          </div>
+        )}
       </div>
-      <div className="border-t border-slate-200 p-3 text-right">
-        <button
-          onClick={() => {
-            store.logHttp(WHO, "POST /support (ticket)");
-            store.helpSession(user, issue?.key ?? "other.general", "ticket");
-            onRaised(store.raiseTicket(user, issue?.key ?? "other.general", body).number);
-          }}
-          className="rounded-lg bg-[#27374D] px-4 py-2 text-sm text-white"
-        >
-          Raise a ticket →
-        </button>
-      </div>
+      {(ticketMode || !answered) && (
+        <div className="border-t border-slate-200 p-3 text-right">
+          <button
+            onClick={() => {
+              store.logHttp(WHO, "POST /support (ticket)");
+              store.helpSession(user, topic, "ticket");
+              const full = transcript ? `${body}\n\n--- Assistant conversation (AI) ---\n${transcript}` : body;
+              onRaised(store.raiseTicket(user, topic, full).number);
+            }}
+            className="rounded-lg bg-[#27374D] px-4 py-2 text-sm text-white"
+          >
+            Raise a ticket →
+          </button>
+        </div>
+      )}
     </>
   );
 }

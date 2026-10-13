@@ -108,6 +108,7 @@ export type LogKind =
   | "tenant_db"
   | "email"
   | "push"
+  | "ai"
   | "sweep";
 
 export interface LogEntry {

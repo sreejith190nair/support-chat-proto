@@ -14,6 +14,7 @@ const BADGE: Record<LogKind, { label: string; cls: string }> = {
   tenant_db: { label: "TENANT DB", cls: "bg-teal-600 text-white" },
   email: { label: "EMAIL", cls: "bg-amber-500 text-white" },
   push: { label: "PUSH", cls: "bg-orange-600 text-white" },
+  ai: { label: "AI", cls: "bg-fuchsia-600 text-white" },
   sweep: { label: "SWEEP", cls: "bg-slate-700 text-white" },
 };
 
@@ -22,6 +23,7 @@ const FILTERS: Record<string, LogKind[] | null> = {
   Reverb: ["reverb", "dropped", "auth"],
   Databases: ["control_plane", "tenant_db"],
   Notifications: ["email", "push"],
+  AI: ["ai"],
   HTTP: ["http"],
   Sweep: ["sweep"],
 };

@@ -76,20 +76,21 @@ export const ISSUES: Record<string, Issue & { category: string }> = Object.fromE
   CATEGORIES.flatMap((c) => c.issues.map((i) => [i.key, { ...i, category: c.label }])),
 );
 
-export const ARTICLES: Record<string, { title: string; summary: string }> = {
-  "bookings/create": { title: "Creating a booking", summary: "Pick dates, a room type and a rate, then confirm. A red date means no availability." },
-  "bookings/availability": { title: "Why a date shows no availability", summary: "Check closed dates, minimum stay rules and room blocks on the rates calendar." },
-  "bookings/amend": { title: "Changing booking dates", summary: "Open the booking, choose Amend stay, pick new dates and confirm the price difference." },
-  "channels/sync-status": { title: "Checking channel sync status", summary: "Channel Manager → Status shows the last push and any errors per channel." },
-  "channels/resend": { title: "Re-sending rates to a channel", summary: "Channel Manager → Rates → Re-send. Changes reach the OTA within about 5 minutes." },
-  "channels/rate-differs": { title: "Why a rate differs on Booking.com", summary: "Usually a markup, a currency setting or a derived rate plan on the channel side." },
-  "channels/mapping": { title: "Mapping rooms to a channel", summary: "Every room type needs a matching room on the OTA before availability can sync." },
-  "billing/vat": { title: "How VAT is calculated on invoices", summary: "VAT follows the property's tax profile and each charge's tax category." },
-  "billing/plans": { title: "Plans and what they include", summary: "Compare plans and upgrade from Account → Subscription." },
-  "rates/plans": { title: "Setting up rate plans", summary: "A rate plan needs dates, room types and to be linked to a channel." },
-  "rates/seasons": { title: "Seasonal rates", summary: "Create a season, set its dates and apply a price rule to your rate plans." },
-  "users/reset": { title: "Resetting a colleague's password", summary: "Settings → Users → … → Send reset link. Superadmins only." },
-  "users/2fa": { title: "Resetting two-factor authentication", summary: "A superadmin can clear 2FA from the user's page; they enrol again at next login." },
+/** keywords: words people actually type ("login", "2FA") that the title may not contain. */
+export const ARTICLES: Record<string, { title: string; summary: string; keywords?: string[] }> = {
+  "bookings/create": { title: "Creating a booking", summary: "Pick dates, a room type and a rate, then confirm. A red date means no availability.", keywords: ["new booking", "reservation", "book", "make booking", "add booking"] },
+  "bookings/availability": { title: "Why a date shows no availability", summary: "Check closed dates, minimum stay rules and room blocks on the rates calendar.", keywords: ["availability", "sold out", "closed", "red date", "min stay", "blocked"] },
+  "bookings/amend": { title: "Changing booking dates", summary: "Open the booking, choose Amend stay, pick new dates and confirm the price difference.", keywords: ["amend", "change dates", "modify", "extend stay", "shorten"] },
+  "channels/sync-status": { title: "Checking channel sync status", summary: "Channel Manager → Status shows the last push and any errors per channel.", keywords: ["sync", "not syncing", "ota", "channel manager", "status", "error"] },
+  "channels/resend": { title: "Re-sending rates to a channel", summary: "Channel Manager → Rates → Re-send. Changes reach the OTA within about 5 minutes.", keywords: ["resend", "push", "update channel", "ota", "channel manager"] },
+  "channels/rate-differs": { title: "Why a rate differs on Booking.com", summary: "Usually a markup, a currency setting or a derived rate plan on the channel side.", keywords: ["price", "markup", "wrong price", "currency", "derived", "rate"] },
+  "channels/mapping": { title: "Mapping rooms to a channel", summary: "Every room type needs a matching room on the OTA before availability can sync.", keywords: ["mapping", "map", "unmapped", "room type", "channel"] },
+  "billing/vat": { title: "How VAT is calculated on invoices", summary: "VAT follows the property's tax profile and each charge's tax category.", keywords: ["vat", "tax", "invoice", "charge"] },
+  "billing/plans": { title: "Plans and what they include", summary: "Compare plans and upgrade from Account → Subscription.", keywords: ["plan", "subscription", "upgrade", "pricing", "billing"] },
+  "rates/plans": { title: "Setting up rate plans", summary: "A rate plan needs dates, room types and to be linked to a channel.", keywords: ["rate", "rate plan", "price", "tariff"] },
+  "rates/seasons": { title: "Seasonal rates", summary: "Create a season, set its dates and apply a price rule to your rate plans.", keywords: ["season", "seasonal", "summer", "winter", "peak", "rate"] },
+  "users/reset": { title: "Resetting a colleague's password", summary: "Settings → Users → … → Send reset link. Superadmins only.", keywords: ["login", "log in", "sign in", "password", "locked out", "user", "access"] },
+  "users/2fa": { title: "Resetting two-factor authentication", summary: "A superadmin can clear 2FA from the user's page; they enrol again at next login.", keywords: ["2fa", "two factor", "authenticator", "otp", "code", "login", "lost phone"] },
 };
 
 /** Entity pickers. Labels carry numbers and dates only, never guest names (GDPR item #4). */
