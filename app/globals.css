@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* A light-only prototype: both "apps" it imitates are light by default. */
+body {
+  background: #ffffff;
+  color: #1e293b;
+}
